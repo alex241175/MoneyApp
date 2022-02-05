@@ -1,0 +1,128 @@
+@page "/account"
+@inject DatabaseContext DbContext
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>MoneyApp : Accounts</PageTitle>
+
+<AuthorizeView Policy= "IsAdmin">
+    <Authorized>
+        <h1>Accounts</h1>
+        <Button Color="Color.Primary" Clicked="@ShowModal">New Account</Button>
+        <TransferComponent OnSave="() => StateHasChanged()"/>
+        @foreach (var a in accounts)
+        {
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="hand col-5" @onclick="()=> OpenTransactions(a.Id)">@a.Name</div>
+                        <div class="col-2">@a.Currency</div>
+                        <div class="col-3 text-right">@( a.Transactions == null ? 0 : a.Transactions.Sum(item => item.Amount).ToString("#,##0.00"))</div> 
+                        <div class="col-1"><span class="hand fas fa-edit" @onclick="()=> Edit(a)"></span> </div>
+                        <div class="col-1"><span class="hand fas fa-trash" @onclick="()=> Remove(a)"></span></div>
+                    </div>
+                </div>
+            </div>
+        }
+
+                        
+        <Modal @ref="modalRef">
+            <ModalContent Centered="true">
+                <ModalHeader>
+                    <ModalTitle>@( account.Id == 0 ? "New Account" : "Update Account" )</ModalTitle>
+                    <CloseButton />
+                </ModalHeader>
+                <ModalBody>
+                    <Field>
+                        <FieldLabel>Name</FieldLabel>
+                        <TextEdit Autofocus="true" Placeholder="Enter Bank Account Name..." @bind-Text="@account.Name" />
+                    </Field>
+                    <Field>
+                        <FieldLabel>Currency</FieldLabel>
+                        <TextEdit Placeholder="Enter Currency Code..." @bind-Text="@account.Currency"/>
+                    </Field>
+                     <Field>
+                        <FieldLabel>To MYR Exchange Rate</FieldLabel>
+                        <NumericEdit TValue="float?" @bind-Value="@account.ToBaseExchangeRate" />
+                    </Field>
+                </ModalBody>
+                <ModalFooter>
+                    <Button Color="Color.Secondary" Clicked="@HideModal">Close</Button>
+                    <Button Color="Color.Primary" Clicked="@Save">Save Changes</Button>
+                </ModalFooter>
+            </ModalContent>
+        </Modal>
+    </Authorized>
+       <NotAuthorized>    
+        <p>Please signed in.</p>    
+        </NotAuthorized>    
+</AuthorizeView>
+
+@code{
+   
+   [Inject] IMessageService MessageService { get; set; }
+    private Modal modalRef;
+    private ClaimsPrincipal? currentUser;
+    private MoneyApp.Data.Account account = new ();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        currentUser = authState.User;       
+    }
+
+    List<MoneyApp.Data.Account> accounts{
+        get{
+            return (from a in DbContext.Accounts orderby a.Name select a).ToList();
+        }
+    }  
+
+    private Task ShowModal()
+    {
+        account = new();
+        account.ToBaseExchangeRate = 1;
+        return modalRef.Show();
+    }
+
+    private Task HideModal()
+    {
+        return modalRef.Hide();
+    }
+
+    private Task Edit(MoneyApp.Data.Account a)
+    {
+        account = a;
+        return modalRef.Show();
+    }
+    private async Task Remove(MoneyApp.Data.Account a)
+    {
+        if ( await MessageService.Confirm( "Are you sure you want to delete?", "Confirmation" ) )
+        {
+            DbContext.Accounts.Remove(a);
+            await DbContext.SaveChangesAsync();
+            StateHasChanged();
+        }
+        else
+        {
+            Console.WriteLine( "Cancel Clicked" );
+        }
+      
+    }
+    private async Task Save()
+    {
+        // Console.WriteLine($"{ account.Name}, {account.Currency}");
+        if (account.Id == 0){
+            User? user = DbContext.Users.FirstOrDefault(x => x.Name == currentUser.Identity.Name);
+            account.UserId = user.Id;
+            await DbContext.Accounts.AddAsync(account);
+        }else{
+            DbContext.Accounts.Update(account);
+        }
+        await DbContext.SaveChangesAsync();
+        StateHasChanged();
+        modalRef.Hide();
+    }
+    private async Task OpenTransactions(int accountId){
+        NavigationManager.NavigateTo("/transaction/" + accountId);
+    }
+}

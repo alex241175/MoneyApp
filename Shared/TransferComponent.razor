@@ -1,0 +1,122 @@
+@inject DatabaseContext DbContext
+<Button Color="Color.Primary" Clicked="@ShowModal">Transfer</Button>   
+<Modal @ref="modalRef">
+    <ModalContent Centered="true">
+        <ModalHeader>
+            <ModalTitle>Transfer</ModalTitle>
+            <CloseButton />
+        </ModalHeader>
+        <ModalBody>
+            <Field>
+                <FieldLabel>Date</FieldLabel>
+                <DateEdit TValue="DateTime" @bind-Date="@transfer.Date"/>
+            </Field>
+            <Field>
+                <FieldLabel>From Account </FieldLabel>
+                <Select TValue="int" SelectedValue="@FromAccountId" SelectedValueChanged="@OnSelectedFromAccountId">
+                    <SelectItem Value="0">Please select one account</SelectItem>
+                    @foreach (var a in accounts)
+                    {  
+                        <SelectItem Value="@(a.Id)">@a.Name</SelectItem>
+                    }
+            
+                </Select>
+            </Field>
+            <Field>
+                <FieldLabel>From Amount @FromCurrency</FieldLabel>
+                <NumericEdit TValue="float" @bind-Value="@transfer.FromAmount"/>
+            </Field>
+            <Field>
+                <FieldLabel>To Account</FieldLabel>
+                <Select TValue="int" SelectedValue="@ToAccountId" SelectedValueChanged="@OnSelectedToAccountId">
+                    <SelectItem Value="0">Please select one account</SelectItem>
+                    @foreach (var a in accounts)
+                    {  
+                        <SelectItem Value="@(a.Id)">@a.Name</SelectItem>
+                    }            
+                </Select>
+            </Field>
+            <Field>
+                <FieldLabel>To Amount @ToCurrency</FieldLabel>
+                <NumericEdit TValue="float" @bind-Value="@transfer.ToAmount"/>
+            </Field>
+            <Field>
+                <FieldLabel>Description</FieldLabel>
+                <TextEdit Placeholder="Enter Description..." @bind-Text="@transfer.Description"/> 
+            </Field>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Secondary" Clicked="@HideModal">Close</Button>
+            <Button Color="Color.Primary" Clicked="@Save">Save Changes</Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+@code{
+    [Parameter]
+    public EventCallback<bool> OnSave {get;set;}
+    private Modal modalRef;
+    private MoneyApp.Data.Transfer transfer = new();
+    List<MoneyApp.Data.Account> accounts;
+    int FromAccountId;
+    int ToAccountId;
+    string FromCurrency = "";
+    string ToCurrency = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        accounts = DbContext.Accounts.ToList();
+    }
+    private Task ShowModal()
+    {
+        transfer.Date = DateTime.Now;
+        return modalRef.Show();
+    }
+
+    private Task HideModal()
+    {
+        return modalRef.Hide();
+    }
+
+    private Task OnSelectedFromAccountId(int value)
+    {
+        FromAccountId = value;
+        FromCurrency = (from a in DbContext.Accounts where a.Id == value select a.Currency).FirstOrDefault();
+        return Task.CompletedTask;
+
+    }
+
+    private Task OnSelectedToAccountId(int value)
+    { 
+        ToAccountId = value;
+        ToCurrency = (from a in DbContext.Accounts where a.Id == value select a.Currency).FirstOrDefault();
+        return Task.CompletedTask;
+    }
+    private async Task Save()    
+    {
+        MoneyApp.Data.Transaction fromTransaction = new(){
+            Date = transfer.Date,
+            Category = "Transfer",
+            AccountId = FromAccountId,
+            Description = transfer.Description,
+            Amount = transfer.FromAmount * -1
+        };           
+        await DbContext.Transactions.AddAsync(fromTransaction);
+        await DbContext.SaveChangesAsync();
+
+        MoneyApp.Data.Transaction toTransaction = new(){
+            Date = transfer.Date,
+            Category = "Transfer",
+            AccountId = ToAccountId,
+            Description = transfer.Description,
+            Amount = transfer.ToAmount
+        };           
+        await DbContext.Transactions.AddAsync(toTransaction);
+        await DbContext.SaveChangesAsync();
+      
+        modalRef.Hide();
+        OnSave.InvokeAsync(true);
+
+
+    }
+}

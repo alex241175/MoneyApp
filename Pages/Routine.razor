@@ -1,0 +1,211 @@
+@page "/routine"
+@inject DatabaseContext DbContext
+
+<PageTitle>MoneyApp : Routine</PageTitle>
+
+<AuthorizeView Policy= "IsAdmin">
+    <Authorized>
+        <h1>Routine monthly transactions</h1>
+        <Button Color="Color.Primary" Clicked="@ShowModal">New</Button>
+        <Button Color="Color.Primary" Clicked="@ShowModalGenerate">Generate</Button>
+        @foreach (var t in transactions)
+        {
+            <div class="row py-3 hand border-bottom" @onclick="() => Edit(t)">
+                <div class="col-2">@t.Date.ToString("dd/MM/yy")</div>
+                <div class="col-3">@t.Account.Name</div>
+                <div class="col-2">@t.Category</div>
+                <div class="col-3">@t.Description</div>
+                <div class="col-2 text-right">@( t.Amount.ToString("#,##0.00"))</div>
+            </div>
+        }                        
+        <Modal @ref="modalRef">
+            <ModalContent Centered="true">
+                <ModalHeader>
+                    <ModalTitle>@( transaction.Id == 0 ? "New : " : "Update : " ) </ModalTitle>
+                    <CloseButton />
+                </ModalHeader>
+                <ModalBody>
+                    <Field>
+                        <FieldLabel>Date</FieldLabel>
+                        <DateEdit TValue="DateTime" @bind-Date="@transaction.Date"/>
+                    </Field>
+                    <Field>
+                        <FieldLabel>Account</FieldLabel>
+                        <Select TValue="int" SelectedValue="@AccountId" SelectedValueChanged="@OnSelectedAccountId">
+                            <SelectItem Value="0">Please select one account</SelectItem>
+                            @foreach (var a in accounts)
+                            {  
+                                <SelectItem Value="@(a.Id)">@a.Name</SelectItem>
+                            }
+                    
+                        </Select>
+                    </Field>
+                     <Field>
+                        <FieldLabel>Category</FieldLabel>
+                        <Select @bind-SelectedValue="@transaction.Category">
+                            <SelectItem Value="0">Please select one category</SelectItem>
+                            @foreach (string c in Category.Data)
+                            {  
+                                <SelectItem Value="@(c)">@c</SelectItem>
+                            }
+                 
+                        </Select>
+                    </Field>
+                    <Field>
+                        <FieldLabel>Description</FieldLabel>
+                        <TextEdit Placeholder="Enter Description..." @bind-Text="@transaction.Description"/> 
+                    </Field>
+                     <Field>
+                        <FieldLabel>Amount @Currency</FieldLabel>
+                        <NumericEdit TValue="float" @bind-Value="@transaction.Amount"/>
+                    </Field>
+                </ModalBody>
+                <ModalFooter>
+                    @if (transaction.Id != 0){
+                        <Button Color="Color.Danger" Clicked="()=> Remove(transaction)">Remove</Button>
+                    }
+                    <Button Color="Color.Secondary" Clicked="@HideModal">Close</Button>
+                    <Button Color="Color.Primary" Clicked="@Save">Save Changes</Button>
+                </ModalFooter>
+            </ModalContent>
+        </Modal>
+        <Modal @ref="modalRefGenerate">
+            <ModalContent Centered="true">
+                <ModalHeader>
+                    <ModalTitle>Generate Routine Transaction</ModalTitle>
+                    <CloseButton />
+                </ModalHeader>
+                <ModalBody>
+                    <Field>
+                        <FieldLabel>Select Month</FieldLabel>
+                        <DateEdit TValue="DateTime" @bind-Date="@GenerateDate"/>
+                    </Field>                      
+                </ModalBody>
+                <ModalFooter>
+                    <Button Color="Color.Primary" Clicked="@Generate">Generate</Button>
+                </ModalFooter>
+            </ModalContent>
+        </Modal>
+        <SnackbarStack @ref="snackbarStack" Location="SnackbarStackLocation.Right" />
+    </Authorized>
+    <NotAuthorized>
+        <p>Please signed in.</p>  
+    </NotAuthorized>
+</AuthorizeView>
+
+
+@code{  
+    private Modal modalRef;
+    private Modal modalRefGenerate;
+    List<MoneyApp.Data.Account> accounts;
+    int AccountId;
+    string Currency = "";
+    DateTime GenerateDate;
+    SnackbarStack snackbarStack;
+    private MoneyApp.Data.Routine transaction = new();
+    protected override async Task OnInitializedAsync()
+    {
+        accounts = DbContext.Accounts.ToList();
+    }
+
+     List<MoneyApp.Data.Routine> transactions{
+        get{
+            return (from t in DbContext.Routine orderby t.Date select t).ToList();
+        }
+    }
+
+     private Task OnSelectedAccountId(int value)
+    {
+        AccountId = value;
+        Currency = (from a in DbContext.Accounts where a.Id == value select a.Currency).FirstOrDefault();
+        return Task.CompletedTask;
+
+    }
+     private Task ShowModal()
+    {
+        transaction = new();
+        transaction.Date = DateTime.Now;        
+        return modalRef.Show();
+    }
+
+    private Task HideModal()
+    {
+        return modalRef.Hide();
+    }
+    private Task ShowModalGenerate()
+    {
+        GenerateDate = DateTime.Now;
+        return modalRefGenerate.Show();
+    }
+
+    private Task HideModalGenerate()
+    {
+        return modalRefGenerate.Hide();
+    }
+    private Task Edit(MoneyApp.Data.Routine t)
+    {
+        transaction = t;
+        AccountId = t.AccountId;
+        Currency = (from a in DbContext.Accounts where a.Id == t.AccountId select a.Currency).FirstOrDefault();
+        return modalRef.Show();
+    }
+    private async Task Save()
+    {                
+        if (transaction.Id == 0)  // Add new
+        {
+            MoneyApp.Data.Routine newTransaction = new(){
+                Date = transaction.Date,
+                Category = transaction.Category,
+                AccountId = AccountId,
+                Description = transaction.Description,
+                Amount = transaction.Amount
+            };           
+            await DbContext.Routine.AddAsync(newTransaction);
+            await DbContext.SaveChangesAsync();
+            transaction.Id = 0;
+            transaction.Description = "";
+            transaction.Amount = 0;
+            StateHasChanged();
+        }else{    //Update
+            transaction.AccountId = AccountId;
+            DbContext.Routine.Update(transaction);
+            await DbContext.SaveChangesAsync();
+            StateHasChanged();
+            modalRef.Hide();
+        }  
+       
+    }
+     private async Task Remove(MoneyApp.Data.Routine t)
+    {
+        DbContext.Routine.Remove(t);
+        await DbContext.SaveChangesAsync();
+        StateHasChanged();
+        modalRef.Hide();
+      
+    }
+
+    private async Task Generate()
+    {
+        var routine = DbContext.Routine.ToList();
+        int year = GenerateDate.Year;
+        int month = GenerateDate.Month;
+
+        foreach( var t in routine){            
+            MoneyApp.Data.Transaction newTransaction = new(){
+                Date = new DateTime(year, month, t.Date.Day),
+                Category = t.Category,
+                AccountId = t.AccountId,
+                Description = t.Description,
+                Amount = t.Amount
+            };           
+            await DbContext.Transactions.AddAsync(newTransaction);
+        }
+        await DbContext.SaveChangesAsync();                
+        await modalRefGenerate.Hide();
+        await snackbarStack.PushAsync("Routine Generated", SnackbarColor.Primary, options => {  options.IntervalBeforeClose = 2000;});
+      
+    }
+    
+          
+    
+}
