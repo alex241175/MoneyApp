@@ -7,23 +7,21 @@
 
 <AuthorizeView Policy= "IsAdmin">
     <Authorized>
-        <h1>Accounts</h1>
+        <h4>Accounts</h4>
         <Button Color="Color.Primary" Clicked="@ShowModal">New Account</Button>
         <TransferComponent OnSave="() => StateHasChanged()"/>
         @foreach (var a in accounts)
         {
-            <div class="card">
-                <div class="card-body">
-                    <div class="row">
-                        <div class="hand col-5" @onclick="()=> OpenTransactions(a.Id)">@a.Name</div>
-                        <div class="col-2">@a.Currency</div>
-                        <div class="col-3 text-right">@( a.Transactions == null ? 0 : a.Transactions.Sum(item => item.Amount).ToString("#,##0.00"))</div> 
-                        <div class="col-1"><span class="hand fas fa-edit" @onclick="()=> Edit(a)"></span> </div>
-                        <div class="col-1"><span class="hand fas fa-trash" @onclick="()=> Remove(a)"></span></div>
-                    </div>
+            <div class="row py-3 border-bottom">
+                <div class="col-6">
+                    @a.Name
+                    <span class="hand fas fa-edit mx-2" @onclick="()=> Edit(a)"></span> 
+                    <span class="hand fas fa-trash" @onclick="()=> Remove(a)"></span> 
                 </div>
+                <div class="col-2">@a.Currency</div>
+                <div class="col-4 text-right hand" @onclick="()=> OpenTransactions(a.Id)">@( a.Transactions == null ? 0 : a.Transactions.Sum(item => item.Amount).ToString("#,##0.00"))</div> 
             </div>
-        }
+          }
 
                         
         <Modal @ref="modalRef">
@@ -98,15 +96,21 @@
     {
         if ( await MessageService.Confirm( "Are you sure you want to delete?", "Confirmation" ) )
         {
-            DbContext.Accounts.Remove(a);
-            await DbContext.SaveChangesAsync();
-            StateHasChanged();
+            int transactionsCount = a.Transactions.Count();
+
+            if (transactionsCount == 0){
+                DbContext.Accounts.Remove(a);
+                await DbContext.SaveChangesAsync();
+                StateHasChanged(); 
+            }else{
+                
+                await MessageService.Info( $"There are transactions under this account. ", "Cannot Remove" );
+            }
         }
         else
         {
             Console.WriteLine( "Cancel Clicked" );
-        }
-      
+        }      
     }
     private async Task Save()
     {

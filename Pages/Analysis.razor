@@ -1,0 +1,104 @@
+@page "/analysis"
+@inject DatabaseContext DbContext
+
+<PageTitle>MoneyApp : Accounts</PageTitle>
+
+<AuthorizeView Policy= "IsAdmin">
+    <Authorized>
+        <h4>Analysis</h4>
+        <!-- query parameter  -->
+        <div class="row">
+            <div class="col-auto">
+                <div class="input-group">
+                    <Label>From</Label>
+                    <DateEdit class="mx-2" TValue="DateTime" @bind-Date="@fromDate"/>
+                    <Label>To</Label>
+                    <DateEdit class="mx-2" TValue="DateTime" @bind-Date="@toDate"/>
+                    <button type="button" class="btn btn-primary" @onclick="@Report" >Run Report</button> 
+                </div>   
+            </div>
+         </div>
+         <!-- result  -->
+         <Accordion class="mt-4">
+            @foreach (var item in items){
+                <Collapse Visible="@item.Visible">
+                    <CollapseHeader>
+                        <Heading Size="HeadingSize.Is5">
+                            <div class="row">
+                                <div class="col-6 hand" @onclick="()=> {item.Visible = !item.Visible;}">@item.Category</div>
+                                <div class="col-6 text-right">@( item.Amount.ToString("#,##0.00"))</div>
+                            </div>
+                        </Heading>
+                    </CollapseHeader>
+                    <CollapseBody>
+                          @foreach (var t in item.Transactions)
+                            {
+                                <div class="row py-3 hand border-bottom">
+                                    <div class="col-3 col-md-2">@t.Date.ToString("dd/MM/yy")</div>
+                                    <div class="col-4 col-md-2">@t.Account.Name</div>
+                                    <div class="col-5 col-md-2 text-right">@( t.Amount.ToString("#,##0.00"))</div>
+                                    <div class="col-12 col-md-6 small">@t.Description</div>
+                                </div>
+                            } 
+                    </CollapseBody>
+                </Collapse>
+            }
+            <p class="mt-4">Total income : @( items.Where(x => x.Category == "Salary").Sum(x => x.Amount))</p>
+            <p class="mt-2">Total spending : @( items.Where(x => x.Category != "Salary").Sum(x => x.Amount))</p>
+         </Accordion>
+
+    </Authorized>
+    <NotAuthorized>    
+       <p>Please signed in.</p>    
+    </NotAuthorized>    
+</AuthorizeView>
+
+@code{
+
+    DateTime fromDate;
+    DateTime toDate;
+    public class Item{
+        public bool Visible { get; set; }
+        public string Category { get; set; }    
+        public float Amount { get; set; }
+        public List<MoneyApp.Data.Transaction> Transactions {get;set;}
+    }
+
+    List<Item> items = new List<Item>{};
+    protected override async Task OnInitializedAsync()
+    {
+        int month = DateTime.Today.Month;
+        int year = DateTime.Today.Year;
+        fromDate = new DateTime(year, month, 1);
+        toDate = fromDate.AddMonths(1).AddDays(-1);
+
+    }
+
+    private void Report()
+    {
+                
+        @* items = (from t in DbContext.Transactions where t.Date >= fromDate where t.Date <= toDate  
+        group t by t.Category into g
+        select new Item {
+            Visible = false,
+            Category = g.Key,
+            Amount = g.Sum(x => x.Amount),
+            Transactions = g.ToList()
+        }).ToList(); *@
+
+        var blackList = new List<string>{"Adjust","Transfer"};
+
+        items = DbContext.Transactions
+        .Where( x => !blackList.Contains(x.Category))
+        .Where(x => x.Date >= fromDate).Where(x => x.Date <= toDate)
+        .GroupBy (x => x.Category)
+        .Select(g => new Item {
+            Visible = false,
+            Category = g.Key,
+            Amount = g.Sum( x=> x.Amount),
+            Transactions = g.ToList()
+        }).ToList();
+
+    }
+
+}

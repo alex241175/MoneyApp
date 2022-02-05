@@ -66,3 +66,7 @@ a, .btn-link {
 .hand{
     cursor: pointer;
 }
+
+.small{
+    font-size: small;
+}

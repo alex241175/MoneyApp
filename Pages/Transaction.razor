@@ -5,19 +5,34 @@
 
 <AuthorizeView Policy= "IsAdmin">
     <Authorized>
-        <h1>@(account.Name + " [" + account.Currency + "]")</h1>
-        <Button Color="Color.Primary" Clicked="@ShowModal">New Transaction</Button>
+        <h4>@(account.Name + " [" + account.Currency + "]")</h4>
+        <div class="row mt-4">
+            <div class="col-auto">
+                <div class="input-group">
+                    <Button Color="Color.Primary" Clicked="@ShowModal">New Transaction</Button>
+                    <FieldLabel class="mx-4">Year</FieldLabel>
+                    <Select TValue="int" SelectedValue="@filterYear" SelectedValueChanged="@OnSelectedFilterYear">
+                        <SelectItem Value="0">Please select year</SelectItem>
+                        @foreach (var y in years)
+                        {  
+                            <SelectItem Value="@y">@y</SelectItem>
+                        }                    
+                    </Select>
+                </div>   
+            </div>
+        </div>            
         <div class="row py-3 font-weight-bold">
-            <div class="col-7">Account balance : </div>
-            <div class="col-5 text-right"> @( account.Transactions.Sum(item => item.Amount).ToString("#,##0.00"))</div>
+            <div class="col-7 col-md-4">Account balance : </div>
+            <div class="col-5 col-md-8 text-right"> @balance.ToString("#,##0.00")</div>
         </div>    
         @foreach (var t in transactions)
         {
             <div class="row py-3 hand border-bottom" @onclick="() => Edit(t)">
-                <div class="col-3">@t.Date.ToString("dd/MM/yy")</div>
-                <div class="col-3">@t.Category</div>
-                <div class="col-3">@t.Description</div>
-                <div class="col-3 text-right">@( t.Amount.ToString("#,##0.00"))</div>
+                <div class="col-3 col-md-2">@t.Date.ToString("dd/MM/yy")</div>
+                <div class="col-4 col-md-2">@t.Category</div>
+                <div class="col-5 col-md-2 text-right">@( t.Amount.ToString("#,##0.00"))</div>
+                <div class="col-12 col-md-6 small">@t.Description</div>
+
             </div>
         }                        
         <Modal @ref="modalRef">
@@ -44,8 +59,8 @@
                     </Field>
                     <Field>
                         <FieldLabel>Description</FieldLabel>
-                        <TextEdit Placeholder="Enter Description...for vendor, product" @bind-Text="@transaction.Description"/> 
-                        @* <Autocomplete TItem="MoneyApp.Data.Transaction"
+                        @* <TextEdit Placeholder="Enter Description...for vendor, product" @bind-Text="@transaction.Description"/>  *@
+                        @* <Autocomplete TItem="TransactionObj"
                                 TValue="string"
                                 Data="@allTransactions"
                                 TextField="@(( item ) => item.Description)"
@@ -58,6 +73,8 @@
                                 CustomFilter="@(( item, searchValue ) => item.Description.IndexOf( searchValue, 0, StringComparison.CurrentCultureIgnoreCase ) >= 0 )">
                              <NotFoundContent> Sorry... @context was not found! :( </NotFoundContent>
                         </Autocomplete> *@
+                        <RadzenAutoComplete Data=@allTransactions TextProperty="Description" Placeholder="Enter Description...for vendor, product" @bind-Value="transaction.Description" Style="Width:100%;" />
+
                     </Field>
                      <Field>
                         <FieldLabel>Amount @account.Currency</FieldLabel>
@@ -86,19 +103,35 @@
     public int accountId {get;set;}
     private Modal modalRef;
     private MoneyApp.Data.Transaction transaction = new();
+    private MoneyApp.Data.Transaction TransactionObj {get;set;}
     private MoneyApp.Data.Account account {get;set;}
     private IEnumerable<MoneyApp.Data.Transaction> allTransactions;
     string selectedAutoCompleteText { get; set; }
+    private int filterYear;
+    private float balance;
+    private List<int> years = new();
+    
     protected override async Task OnInitializedAsync()
     {
         account = await DbContext.Accounts.FindAsync(accountId);
-        allTransactions = DbContext.Transactions.GroupBy(x => x.Description).Select(x => x.First()).AsEnumerable().ToList();
+        var thisYear = DateTime.Today.Year;
+        for (int i= 0; i<5;i++){
+            years.Add(thisYear-i);
+        }
+        filterYear = thisYear;
+        allTransactions = DbContext.Transactions.GroupBy(x => x.Description).Select(x => x.First()).ToList();  // for description autocomplete
+        balance = (from t in DbContext.Transactions where t.AccountId == accountId select t.Amount).Sum();
     }
 
      List<MoneyApp.Data.Transaction> transactions{
         get{
-            return (from t in DbContext.Transactions where t.AccountId == accountId orderby t.Date descending select t).ToList();
+            return (from t in DbContext.Transactions where t.Date.Year == filterYear where t.AccountId == accountId orderby t.Date descending select t).ToList();
         }
+    }
+
+    private void OnSelectedFilterYear(int value){
+        filterYear = value;
+        StateHasChanged();
     }
      private Task ShowModal()
     {

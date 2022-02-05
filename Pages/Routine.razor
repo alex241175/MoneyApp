@@ -5,17 +5,17 @@
 
 <AuthorizeView Policy= "IsAdmin">
     <Authorized>
-        <h1>Routine monthly transactions</h1>
+        <h4>Routine monthly transactions</h4>
         <Button Color="Color.Primary" Clicked="@ShowModal">New</Button>
         <Button Color="Color.Primary" Clicked="@ShowModalGenerate">Generate</Button>
         @foreach (var t in transactions)
         {
             <div class="row py-3 hand border-bottom" @onclick="() => Edit(t)">
-                <div class="col-2">@t.Date.ToString("dd/MM/yy")</div>
-                <div class="col-3">@t.Account.Name</div>
-                <div class="col-2">@t.Category</div>
-                <div class="col-3">@t.Description</div>
-                <div class="col-2 text-right">@( t.Amount.ToString("#,##0.00"))</div>
+                <div class="col-3 col-md-2">@t.Date.ToString("dd/MM/yy")</div>
+                <div class="col-6 col-md-2">@t.Account.Name</div>
+                <div class="col-3 col-md-2 text-right">@( t.Amount.ToString("#,##0.00"))</div>
+                <div class="col-5 col-md-2 small">@t.Category</div>
+                <div class="col-7 col-md-4 small">@t.Description</div>
             </div>
         }                        
         <Modal @ref="modalRef">

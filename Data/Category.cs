@@ -17,7 +17,7 @@ namespace MoneyApp.Data
             "Leisure",
             "House",
             "Clothing",
-            "Other Spending",
+            "Other",
             "Adjust",
             "Transfer"
         };
