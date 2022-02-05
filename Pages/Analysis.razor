@@ -5,7 +5,7 @@
 
 <AuthorizeView Policy= "IsAdmin">
     <Authorized>
-        <h4>Analysis</h4>
+        <h4>Analysis (MYR)</h4>
         <!-- query parameter  -->
         <div class="row">
             <div class="col-auto">
@@ -43,8 +43,8 @@
                     </CollapseBody>
                 </Collapse>
             }
-            <p class="mt-4">Total income : @( items.Where(x => x.Category == "Salary").Sum(x => x.Amount))</p>
-            <p class="mt-2">Total spending : @( items.Where(x => x.Category != "Salary").Sum(x => x.Amount))</p>
+            <p class="mt-4">Total income : @( items.Where(x => x.Category == "Salary").Sum(x => x.Amount).ToString("#,##0.00"))</p>
+            <p class="mt-2">Total spending : @( items.Where(x => x.Category != "Salary").Sum(x => x.Amount).ToString("#,##0.00"))</p>
          </Accordion>
 
     </Authorized>
@@ -91,6 +91,13 @@
         items = DbContext.Transactions
         .Where( x => !blackList.Contains(x.Category))
         .Where(x => x.Date >= fromDate).Where(x => x.Date <= toDate)
+        .Select(x => new MoneyApp.Data.Transaction {
+            Date = x.Date,
+            Category = x.Category,
+            Description = x.Description,
+            Amount = x.Amount * x.Account.ToBaseExchangeRate,
+            Account = x.Account
+        })
         .GroupBy (x => x.Category)
         .Select(g => new Item {
             Visible = false,
