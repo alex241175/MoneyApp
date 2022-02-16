@@ -1,5 +1,6 @@
 @page "/transaction/{accountId:int}"
 @inject DatabaseContext DbContext
+@implements IDisposable
 
 <PageTitle>MoneyApp : Transactions</PageTitle>
 
@@ -60,25 +61,28 @@
                     <Field>
                         <FieldLabel>Description</FieldLabel>
                         @* <TextEdit Placeholder="Enter Description...for vendor, product" @bind-Text="@transaction.Description"/>  *@
-                        @* <Autocomplete TItem="TransactionObj"
+                        <Autocomplete TItem="MoneyApp.Data.Transaction"
                                 TValue="string"
                                 Data="@allTransactions"
                                 TextField="@(( item ) => item.Description)"
                                 ValueField="@(( item ) => item.Description)"
                                 @bind-SelectedValue="@transaction.Description"
-                                @bind-SelectedText="selectedAutoCompleteText"
+                                @bind-SelectedText="@selectedAutoCompleteText"
                                 Placeholder="Enter description..."
                                 Filter="AutocompleteFilter.StartsWith"
                                 FreeTyping
-                                CustomFilter="@(( item, searchValue ) => item.Description.IndexOf( searchValue, 0, StringComparison.CurrentCultureIgnoreCase ) >= 0 )">
-                             <NotFoundContent> Sorry... @context was not found! :( </NotFoundContent>
-                        </Autocomplete> *@
-                        <RadzenAutoComplete Data=@allTransactions TextProperty="Description" Placeholder="Enter Description...for vendor, product" @bind-Value="transaction.Description" Style="Width:100%;" />
+                                CustomFilter="@(( item, searchValue ) => item.Description?.IndexOf( searchValue, 0, StringComparison.CurrentCultureIgnoreCase ) >= 0 )">
+                        </Autocomplete>
+                        @* <RadzenAutoComplete Data=@allTransactions TextProperty="Description" Placeholder="Enter Description...for vendor, product" @bind-Value="transaction.Description" Style="Width:100%;" /> *@
 
                     </Field>
                      <Field>
                         <FieldLabel>Amount @account.Currency</FieldLabel>
-                        <NumericEdit TValue="float" @bind-Value="@transaction.Amount" />
+                     </Field>
+                     <Field>
+                        <input @bind="@transaction.Amount" >
+                        @* <TextEdit @bind-Text="@transaction.Amount.ToString()" /> *@
+                         @* <NumericEdit @bind-Text="@transaction.Amount.ToString()" /> *@
                     </Field>
                 </ModalBody>
                 <ModalFooter>
@@ -90,6 +94,7 @@
                 </ModalFooter>
             </ModalContent>
         </Modal>
+        <SnackbarStack @ref="snackbarStack" Location="SnackbarStackLocation.Right" />
     </Authorized>
     <NotAuthorized>
         <p>Please signed in.</p>  
@@ -103,14 +108,15 @@
     public int accountId {get;set;}
     private Modal modalRef;
     private MoneyApp.Data.Transaction transaction = new();
-    private MoneyApp.Data.Transaction TransactionObj {get;set;}
     private MoneyApp.Data.Account account {get;set;}
-    private IEnumerable<MoneyApp.Data.Transaction> allTransactions;
-    string selectedAutoCompleteText { get; set; }
+    private IEnumerable<MoneyApp.Data.Transaction> allTransactions {get;set;}
+    public string selectedSearchValue { get; set; }
+    public string selectedAutoCompleteText { get; set; } ="";
     private int filterYear;
     private float balance;
     private List<int> years = new();
-    
+    SnackbarStack snackbarStack;
+  
     protected override async Task OnInitializedAsync()
     {
         account = await DbContext.Accounts.FindAsync(accountId);
@@ -120,6 +126,7 @@
         }
         filterYear = thisYear;
         allTransactions = DbContext.Transactions.GroupBy(x => x.Description).Select(x => x.First()).ToList();  // for description autocomplete
+        //allTransactions = DbContext.Transactions.ToList();
         balance = (from t in DbContext.Transactions where t.AccountId == accountId select t.Amount).Sum();
     }
 
@@ -136,7 +143,7 @@
      private Task ShowModal()
     {
         transaction = new();
-        transaction.Date = DateTime.Now;        
+        transaction.Date = DateTime.Now; 
         return modalRef.Show();
     }
 
@@ -157,7 +164,7 @@
                 Date = transaction.Date,
                 Category = transaction.Category,
                 AccountId = accountId,
-                Description = transaction.Description,
+                Description = selectedAutoCompleteText,
                 Amount = transaction.Amount
             };           
             await DbContext.Transactions.AddAsync(newTransaction);
@@ -166,7 +173,10 @@
             transaction.Description = "";
             transaction.Amount = 0;
             StateHasChanged();
+            await snackbarStack.PushAsync("Transaction added", SnackbarColor.Primary, options => {  options.IntervalBeforeClose = 2000;});
+
         }else{    //Update
+            transaction.Description = selectedAutoCompleteText;
             DbContext.Transactions.Update(transaction);
             await DbContext.SaveChangesAsync();
             StateHasChanged();
@@ -181,6 +191,11 @@
         StateHasChanged();
         modalRef.Hide();
       
+    }
+
+    public void Dispose()
+    {
+        @* DbContext.Entry(transactions).State = EntityState.Unchanged;  //revert all unsaved changes *@
     }
     
           
