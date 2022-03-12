@@ -16,7 +16,7 @@ namespace MoneyApp.Data
                 var email = principal.FindFirstValue(ClaimTypes.Email);
                 // matching google alccount name
                 //User? user = _db.Users.FirstOrDefault(x => x.UserName == principal.Identity.Name);
-                User? user = _db.Users.FirstOrDefault(x => x.Email == email);
+                User? user = _db.Users?.FirstOrDefault(x => x.Email == email);
                 if (user != null){
                     ClaimsIdentity id = new ClaimsIdentity();
                     id.AddClaim(new Claim("Role", user.Role));

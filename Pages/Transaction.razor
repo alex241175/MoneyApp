@@ -1,31 +1,45 @@
+@page "/transaction"
 @page "/transaction/{accountId:int}"
 @inject DatabaseContext DbContext
 @implements IDisposable
+@using System.IO
+@inject IWebHostEnvironment env
 
 <PageTitle>MoneyApp : Transactions</PageTitle>
 
 <AuthorizeView Policy= "IsAdmin">
     <Authorized>
-        <h4>@(account.Name + " [" + account.Currency + "]")</h4>
-        <div class="row mt-4">
-            <div class="col-auto">
-                <div class="input-group">
-                    <Button Color="Color.Primary" Clicked="@ShowModal">New Transaction</Button>
-                    <FieldLabel class="mx-4">Year</FieldLabel>
-                    <Select TValue="int" SelectedValue="@filterYear" SelectedValueChanged="@OnSelectedFilterYear">
-                        <SelectItem Value="0">Please select year</SelectItem>
-                        @foreach (var y in years)
-                        {  
-                            <SelectItem Value="@y">@y</SelectItem>
-                        }                    
-                    </Select>
+        @if (accountId != 0){
+            <h4>@(account.Name + " [" + account.Currency + "]")</h4>        
+            <div class="row mt-4">
+                <div class="col-auto">
+                    <div class="input-group">
+                        <Button Color="Blazorise.Color.Primary" Clicked="@ShowModal">New Transaction</Button>
+                        <FieldLabel class="mx-4">Year</FieldLabel>
+                        <Select TValue="int" SelectedValue="@filterYear" SelectedValueChanged="@OnSelectedFilterYear">
+                            <SelectItem Value="0">Please select year</SelectItem>
+                            @foreach (var y in years)
+                            {  
+                                <SelectItem Value="@y">@y</SelectItem>
+                            }                    
+                        </Select>
+                    </div>   
+                </div>
+            </div>            
+            <div class="row py-3 font-weight-bold">
+                <div class="col-7 col-md-4">Account balance : </div>
+                <div class="col-5 col-md-8 text-right"> @balance.ToString("#,##0.00")</div>
+            </div>
+        }else{   // from transactions
+            <div class="row">
+                <div class="col-auto">
+                      <div class="input-group">
+                        <input class="form-control" @bind="InputString" />                    
+                        <button type="button" class="ml-4 btn btn-light" @onclick="@Search" >Search Description</button> 
+                     </div>
                 </div>   
             </div>
-        </div>            
-        <div class="row py-3 font-weight-bold">
-            <div class="col-7 col-md-4">Account balance : </div>
-            <div class="col-5 col-md-8 text-right"> @balance.ToString("#,##0.00")</div>
-        </div>    
+        }  
         @foreach (var t in transactions)
         {
             <div class="row py-3 hand border-bottom" @onclick="() => Edit(t)">
@@ -35,11 +49,19 @@
                 <div class="col-12 col-md-6 small">@t.Description</div>
 
             </div>
-        }                        
+        }
+        <PaginationComponent CurrentPage="@CurrentPage" PageSize ="@PageSize" Count="@Count" PageRangeSize="@PageRangeSize" OnLoad="LoadPage"/>
+                        
         <Modal @ref="modalRef">
-            <ModalContent Centered="true">
+            <ModalContent Centered="true">             
                 <ModalHeader>
-                    <ModalTitle>@( transaction.Id == 0 ? "New : " : "Update : " ) @account.Name </ModalTitle>
+                    <ModalTitle>
+                        @if (accountId != 0){
+                            @( transaction.Id == 0 ? "New : " : "Update : " ) @account.Name 
+                        }else{
+                            @( transaction.Category ) 
+                        }
+                    </ModalTitle>
                     <CloseButton />
                 </ModalHeader>
                 <ModalBody>
@@ -64,8 +86,8 @@
                         <Autocomplete TItem="MoneyApp.Data.Transaction"
                                 TValue="string"
                                 Data="@allTransactions"
-                                TextField="@(( item ) => item.Description)"
-                                ValueField="@(( item ) => item.Description)"
+                                TextField="@(( item ) => item?.Description)"
+                                ValueField="@(( item ) => item?.Description)"
                                 @bind-SelectedValue="@transaction.Description"
                                 @bind-SelectedText="@selectedAutoCompleteText"
                                 Placeholder="Enter description..."
@@ -77,20 +99,33 @@
 
                     </Field>
                      <Field>
-                        <FieldLabel>Amount @account.Currency</FieldLabel>
+                        <FieldLabel>Amount @( accountId != 0 ? account.Currency : "" )</FieldLabel>
                      </Field>
                      <Field>
                         <input @bind="@transaction.Amount" >
                         @* <TextEdit @bind-Text="@transaction.Amount.ToString()" /> *@
                          @* <NumericEdit @bind-Text="@transaction.Amount.ToString()" /> *@
                     </Field>
+                    <Field>
+                       @if (!string.IsNullOrEmpty(transaction.FilePath)){
+                            <img class="mt-2" src="upload/@transaction.FilePath" height="400">
+                       }
+                     </Field>
+                     <Field>
+                        <FieldLabel>Attach New Image</FieldLabel>
+                     </Field>
+                     <Field>
+                        @* <input type="file" accept="image/*" capture> *@
+                        <InputFile OnChange="OnInputFileChange" accept="image/*" capture />
+                        
+                    </Field>
                 </ModalBody>
                 <ModalFooter>
                      @if (transaction.Id != 0){
-                        <Button Color="Color.Danger" Clicked="()=> Remove(transaction)">Remove</Button>
+                        <Button Color="Blazorise.Color.Danger" Clicked="()=> Remove(transaction)">Remove</Button>
                      }
-                    <Button Color="Color.Secondary" Clicked="@HideModal">Close</Button>
-                    <Button Color="Color.Primary" Clicked="@Save">Save Changes</Button>
+                    <Button Color="Blazorise.Color.Secondary" Clicked="@HideModal">Close</Button>
+                    <Button Color="Blazorise.Color.Primary" Clicked="@Save">Save Changes</Button>
                 </ModalFooter>
             </ModalContent>
         </Modal>
@@ -106,6 +141,8 @@
    
    [Parameter]
     public int accountId {get;set;}
+    private String InputString;
+    private String Query = "";
     private Modal modalRef;
     private MoneyApp.Data.Transaction transaction = new();
     private MoneyApp.Data.Account account {get;set;}
@@ -113,13 +150,21 @@
     public string selectedSearchValue { get; set; }
     public string selectedAutoCompleteText { get; set; } ="";
     private int filterYear;
-    private float balance;
+    
     private List<int> years = new();
     SnackbarStack snackbarStack;
+    IReadOnlyList<IBrowserFile> selectedFiles;
+
+    private int CurrentPage = 1;
+    private int PageSize = 20;
+    private int PageRangeSize = 2;
+    private int Count = 0;
   
     protected override async Task OnInitializedAsync()
     {
-        account = await DbContext.Accounts.FindAsync(accountId);
+        if (accountId != 0){
+            account = await DbContext.Accounts.FindAsync(accountId);
+        }
         var thisYear = DateTime.Today.Year;
         for (int i= 0; i<5;i++){
             years.Add(thisYear-i);
@@ -127,14 +172,25 @@
         filterYear = thisYear;
         allTransactions = DbContext.Transactions.GroupBy(x => x.Description).Select(x => x.First()).ToList();  // for description autocomplete
         //allTransactions = DbContext.Transactions.ToList();
-        balance = (from t in DbContext.Transactions where t.AccountId == accountId select t.Amount).Sum();
+        // balance = (from t in DbContext.Transactions where t.AccountId == accountId select t.Amount).Sum();
+
     }
 
-     List<MoneyApp.Data.Transaction> transactions{
+    List<MoneyApp.Data.Transaction> transactions{
         get{
-            return (from t in DbContext.Transactions where t.Date.Year == filterYear where t.AccountId == accountId orderby t.Date descending select t).ToList();
+            var transactions = from t in DbContext.Transactions select t;
+            if (!string.IsNullOrEmpty(Query)){
+                transactions = transactions.Where(t => t.Description.ToLower().Contains(Query.ToLower()));
+            }
+            if (accountId != 0 ) {
+                transactions = from t in transactions where t.Date.Year == filterYear where t.AccountId == accountId select t;
+            }
+            Count = transactions.Count();
+            return transactions.OrderByDescending(t => t.Date).Skip((CurrentPage - 1) * PageSize).Take(PageSize).ToList();
         }
     }
+
+    private float balance  => transactions.Select(x => x.Amount).Sum();
 
     private void OnSelectedFilterYear(int value){
         filterYear = value;
@@ -156,6 +212,14 @@
         transaction = t;
         return modalRef.Show();
     }
+    private void Search()
+    {
+        Query = InputString;
+    }
+
+    private void LoadPage(int PageNumber){
+        CurrentPage = PageNumber;
+    }
     private async Task Save()
     {                
         if (transaction.Id == 0)  // Add new
@@ -166,7 +230,24 @@
                 AccountId = accountId,
                 Description = selectedAutoCompleteText,
                 Amount = transaction.Amount
-            };           
+            };
+
+            //upload file if any
+            if (selectedFiles.Count>0){
+                foreach (var f in selectedFiles)
+                {
+                    var file = await f.RequestImageFileAsync(f.ContentType, 640, 480); // resize the image file
+                    Stream stream = file.OpenReadStream(5000000); //specify max file size = 5MB
+                    string ext = Path.GetExtension(file.Name);
+                    string fName = "f" + DateTime.Now.ToString("yyyyMMddHHmmss") + ext;
+                    var path = $"{env.WebRootPath}\\upload\\{fName}";
+                    FileStream fs = File.Create(path);
+                    await stream.CopyToAsync(fs);
+                    stream.Close();
+                    fs.Close();
+                    newTransaction.FilePath = fName;
+                }
+            }           
             await DbContext.Transactions.AddAsync(newTransaction);
             await DbContext.SaveChangesAsync();
             transaction.Id = 0;
@@ -177,6 +258,24 @@
 
         }else{    //Update
             transaction.Description = selectedAutoCompleteText;
+            //upload file if any
+            if (selectedFiles.Count>0){
+                // delete existing file
+
+                foreach (var f in selectedFiles)
+                {
+                    var file = await f.RequestImageFileAsync(f.ContentType, 640, 480); // resize the image file
+                    Stream stream = file.OpenReadStream(5000000); //specify max file size = 5MB
+                    string ext = Path.GetExtension(file.Name);
+                    string fName = "f" + DateTime.Now.ToString("yyyyMMddHHmmss") + ext;
+                    var path = $"{env.WebRootPath}\\upload\\{fName}";
+                    FileStream fs = File.Create(path);
+                    await stream.CopyToAsync(fs);
+                    stream.Close();
+                    fs.Close();
+                    transaction.FilePath = fName;
+                }
+            }
             DbContext.Transactions.Update(transaction);
             await DbContext.SaveChangesAsync();
             StateHasChanged();
@@ -193,11 +292,17 @@
       
     }
 
+    private void OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        selectedFiles = e.GetMultipleFiles();
+        //Message = $"{selectedFiles.Count} file(s) selected";
+        this.StateHasChanged();
+    }
+
     public void Dispose()
     {
         @* DbContext.Entry(transactions).State = EntityState.Unchanged;  //revert all unsaved changes *@
-    }
-    
+    }  
           
     
 }

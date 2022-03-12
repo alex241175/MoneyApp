@@ -7,7 +7,7 @@ namespace MoneyApp.Data
         public string? Currency { get; set; }
         public int UserId { get; set; } 
         public float ToBaseExchangeRate {get;set;}  //Base is MYR
-        public virtual List<Transaction> Transactions {get;set;}   
+        public virtual List<Transaction>? Transactions {get;set;}   
 
     }
 }
